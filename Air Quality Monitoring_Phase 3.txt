@@ -1,0 +1,146 @@
+sketch.ino
+#include <WiFi.h>
+#include <ThingSpeak.h>
+#include "DHTesp.h"
+
+#define DO_PIN 13
+
+char ssid[] = "Wokwi-GUEST";
+char pass[] = "";
+WiFiClient client;
+unsigned long myChannelNumber =  2072862;
+const char * myWriteAPIKey = "FUPFO65KYKXFYZTJ";
+DHTesp dhtSensor;
+TempAndHumidity data;
+const int DHT_PIN = 12;
+const int TRIG_PIN = 2;
+const int ECHO_PIN = 4;
+long duration, distance;
+int statusCode;
+
+void setup() {
+Serial.begin(9600);
+pinMode(32, INPUT); 
+pinMode(34, INPUT);
+WiFi.mode(WIFI_STA);
+ThingSpeak.begin(client);
+dhtSensor.setup(DHT_PIN, DHTesp::DHT22);
+pinMode(TRIG_PIN, OUTPUT);
+pinMode(ECHO_PIN, INPUT);
+}
+
+void loop() {
+  pinMode(DO_PIN, INPUT);
+connectToCloud();
+aqi();
+computeData();
+writeData();    
+}
+
+void connectToCloud(){
+if(WiFi.status() != WL_CONNECTED) {
+Serial.print("Attempting to connect");
+while(WiFi.status() != WL_CONNECTED) {
+WiFi.begin(ssid, pass);
+for(int i=0;i<5;i++) {
+Serial.print(".");
+delay(5000);
+}
+}
+Serial.println("\nConnected.");
+}
+}
+
+void aqi(){
+  int aqi=analogRead(34);
+  Serial.println("AQI INDEX=" + String(aqi));
+}
+
+void computeData(){
+distance = getDistanceInCentimeters();
+data = dhtSensor.getTempAndHumidity();
+Serial.println("Humi: " + String(data.humidity));
+Serial.println("Temp: " + String(data.temperature));
+Serial.println("Dist: " + String(distance));
+int lightState = digitalRead(DO_PIN);
+  if (lightState == HIGH)
+    Serial.println("It is dark");
+  else
+    Serial.println("It is light");
+
+Serial.println("\-----------");
+}
+void writeData(){
+int lightState = digitalRead(DO_PIN);
+int aqi=analogRead(34);
+ThingSpeak.setField(1, distance);
+ThingSpeak.setField(3, data.humidity);
+ThingSpeak.setField(2, data.temperature);
+ThingSpeak.setField(4, lightState);
+ThingSpeak.setField(5, aqi);
+statusCode = ThingSpeak.writeFields(myChannelNumber,myWriteAPIKey);
+if(statusCode == 200) //successful writing code
+Serial.println("Channel update successful.");
+else
+Serial.println("Problem Writing data. HTTP error code :" +
+String(statusCode));
+delay(5000); // data to be uploaded every 15secs
+}
+long getDistanceInCentimeters() {
+digitalWrite(TRIG_PIN,LOW);
+delayMicroseconds(2);
+digitalWrite(TRIG_PIN, HIGH);
+delayMicroseconds(10);
+digitalWrite(TRIG_PIN, LOW);
+duration = pulseIn(ECHO_PIN, HIGH);
+return (duration * 0.034 / 2);
+}
+Diagram.json
+{
+  "version": 1,
+  "author": "Thulasidharan S",
+  "editor": "wokwi",
+  "parts": [
+    { "type": "wokwi-esp32-devkit-v1", "id": "esp", "top": -24.1, "left": -197, "attrs": {} },
+    {
+      "type": "wokwi-hc-sr04",
+      "id": "ultrasonic1",
+      "top": -104.1,
+      "left": -32.9,
+      "attrs": { "distance": "111" }
+    },
+    {
+      "type": "wokwi-dht22",
+      "id": "dht1",
+      "top": -92.13,
+      "left": -291.83,
+      "attrs": { "temperature": "16.1", "humidity": "28" }
+    },
+    {
+      "type": "wokwi-photoresistor-sensor",
+      "id": "ldr1",
+      "top": -188.8,
+      "left": -402.4,
+      "attrs": {}
+    },
+    { "type": "wokwi-potentiometer", "id": "pot1", "top": -39.7, "left": -451.4, "attrs": {} }
+  ],
+  "connections": [
+    [ "esp:TX0", "$serialMonitor:RX", "", [] ],
+    [ "esp:RX0", "$serialMonitor:TX", "", [] ],
+    [ "ultrasonic1:VCC", "esp:3V3", "red", [ "v0" ] ],
+    [ "ultrasonic1:GND", "esp:GND.1", "black", [ "v0" ] ],
+    [ "esp:D4", "ultrasonic1:ECHO", "green", [ "h0" ] ],
+    [ "ultrasonic1:TRIG", "esp:D2", "yellow", [ "v0" ] ],
+    [ "dht1:GND", "esp:GND.2", "black", [ "v0" ] ],
+    [ "dht1:VCC", "esp:3V3", "red", [ "v0" ] ],
+    [ "ldr1:VCC", "esp:3V3", "red", [ "h0" ] ],
+    [ "ldr1:GND", "esp:GND.1", "black", [ "h0" ] ],
+    [ "ldr1:DO", "esp:D13", "green", [ "h172.8", "v172.2" ] ],
+    [ "esp:D12", "dht1:SDA", "green", [ "h0" ] ],
+    [ "pot1:GND", "esp:GND.2", "black", [ "v0" ] ],
+    [ "pot1:VCC", "esp:3V3", "red", [ "v163.2", "h191.2" ] ],
+    [ "pot1:SIG", "esp:D34", "green", [ "v38.4", "h191.6", "v-9.6" ] ]
+  ],
+  "dependencies": {}
+}
